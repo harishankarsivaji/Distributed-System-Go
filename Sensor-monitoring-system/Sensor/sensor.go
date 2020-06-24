@@ -5,6 +5,8 @@ import (
 	"encoding/gob"
 	"flag"
 	"github.com/harishankarsivaji/Distributed-System-Go/Sensor-monitoring-system/dto"
+	"github.com/harishankarsivaji/Distributed-System-Go/Sensor-monitoring-system/qutils"
+	"github.com/streadway/amqp"
 	"log"
 	"math/rand"
 	"strconv"
@@ -25,6 +27,25 @@ var nom = (*max-*min)/2 + *min
 
 func main() {
 	flag.Parse()
+
+	conn, ch := qutils.GetChannel(url)
+	defer conn.Close()
+	defer ch.Close()
+
+	dataQueue := qutils.GetQueue(*name, ch)
+	//sensorQueue := qutils.GetQueue(qutils.SensorListQueue, ch)
+
+	msg := amqp.Publishing{
+		Body: []byte(*name),
+	}
+
+	ch.Publish(
+		"amq.fanout",
+		"",
+		false,
+		false,
+		msg)
+
 	dur, _ := time.ParseDuration(strconv.Itoa(1000/int(*freq)) + "ms")
 
 	signal := time.Tick(dur)
@@ -42,6 +63,17 @@ func main() {
 
 		buf.Reset()
 		enc.Encode(reading)
+
+		msg := amqp.Publishing{
+			Body: buf.Bytes(),
+		}
+		ch.Publish(
+			"",
+			dataQueue.Name,
+			false,
+			false,
+			msg)
+
 		log.Printf("Reading sent. Value: %v\n", value)
 	}
 }
